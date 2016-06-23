@@ -1,0 +1,66 @@
+#!/usr/bin/python
+import sys
+import SocketServer
+import struct
+import socket
+import json
+import math
+import os, urllib
+import re
+from mapper import select_replica
+ 
+
+class MyDNSHandler(SocketServer.BaseRequestHandler):
+
+    def handle(self):
+        global client_mapping_geo
+        data = self.request[0]
+        sock = self.request[1]
+        ID = data[:2]
+        flags = struct.pack('!H', 0x8180)
+        count = struct.pack('!HHHH', 1, 1, 0, 0)
+        header = ID + flags + count
+        self.q_name = 'cs5700cdn.example.com'        
+        query = ''.join(chr(len(x)) + x for x in self.q_name.split('.'))
+        query += '\x00'  
+        self.q_type = 0x0001
+        self.q_class = 0x0001
+        query_part =  query + struct.pack('>HH', self.q_type, self.q_class)
+        an_name = 0xC00C
+        an_type = 0x0001
+        an_class = 0x0001
+        an_ttl = 60  
+        an_len = 4
+        nearest_ip,self.client_mapping_geo = select_replica(self.client_address[0],client_mapping_geo)
+        answer_part = struct.pack( '>HHHLH4s', an_name, an_type, an_class,
+                          an_ttl, an_len, socket.inet_aton( nearest_ip ) );
+        msg = header + query_part + answer_part
+        sock.sendto(msg, self.client_address)
+
+ 
+
+class DNSserver ( SocketServer.UDPServer ):
+    def __init__( self, name, port, handler = MyDNSHandler):
+        self.name = name
+        global client_mapping_geo
+
+        SocketServer.UDPServer.__init__ (self,(( '', port)),handler)
+        print 'DNSServer is up'
+        return
+
+
+try:
+    switch1=sys.argv[1]
+    if switch1=='-p':
+            port=int(sys.argv[2])
+    switch2=sys.argv[3]
+    if switch2=='-n':
+            name=sys.argv[4]
+
+except:
+    
+    sys.exit('Usage: %s -p <port> -n <name>' % sys.argv[0])
+
+client_mapping_geo={}
+dns_server = DNSserver(name,port)
+dns_server.serve_forever()

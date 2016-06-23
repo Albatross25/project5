@@ -1,0 +1,106 @@
+#!/usr/bin/python
+from BaseHTTPServer import BaseHTTPRequestHandler,HTTPServer
+from urlparse import urlparse
+import sys,os,urllib2, collections, gzip, operator
+
+class httphandler(BaseHTTPRequestHandler):
+        def __init__(self,origin,folder_size,cache,*args):
+                self.origin=origin
+		self.folder_size=folder_size
+		self.cache=cache
+                BaseHTTPRequestHandler.__init__(self, *args)
+
+        def do_GET(self):
+	#calculate the size of the folder
+	 folder = os.getcwd()
+         for (path, dirs, files) in os.walk(folder):
+                                for file in files:
+                                        filename = os.path.join(path, file)
+                                   
+                                        self.folder_size += os.path.getsize(filename)
+         self.folder_size=self.folder_size/(1024.0*1024.0)
+	 #check if file is present in cache
+	 if self.path not in self.cache:
+		try:
+                        #fetch the page from the origin server
+                        request = 'http://' + self.origin + ':8080' + self.path
+                        response = urllib2.urlopen(request)
+                        self.download_from_origin(self.path, response)
+                except urllib2.HTTPError as http_error:
+                        self.send_error(http_error.code, http_error.reason)
+                        return
+                except urllib2.URLError as url_error:
+                        self.send_error(url_error.reason)
+                        return
+
+#update the cache with the frequeency of visit
+	 else:
+		for key,value in self.cache.iteritems():
+			if key==self.path:
+				value=value+1
+				self.cache[key]=value
+				#print self.cache
+#send the response to the client    
+         with open(os.getcwd() + self.path) as webpage:
+        	self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(webpage.read())
+#function to download the file
+        def download_from_origin(self, path, response):
+                filename = os.getcwd() + path
+		#print filename
+                directory = os.path.dirname(filename)
+                if not os.path.exists(directory):
+                   os.makedirs(directory)
+
+                compressed_file = gzip.open(filename, 'wb')
+#check if folder size is less than 10MB
+            	if self.folder_size < 10.00:
+               
+				compressed_file.write(response.read())  # Download complete
+                		self.cache[path]=1				
+		else:   	
+				print 'size exceeding 10MB'
+                   		#sort the cache to check for least visited site
+				sorted_cache = sorted(self.cache.items(), key=operator.itemgetter(1))
+				#remove the least visited site from cache
+				remove_file = sorted_cache[0][0]      
+                    		os.remove(os.getcwd() + remove_file)
+				del cache[remove_file]
+                                compressed_file.write(response.read())  # Download the file after free space
+                                self.cache[path]=1
+			
+			
+                compressed_file.close()
+		
+
+#reading the port and origin server from arguments
+try:
+        switch1=sys.argv[1]
+        if switch1=='-p':
+           port=int(sys.argv[2])
+        switch2=sys.argv[3]
+        if switch2=='-o':
+                origin=sys.argv[4]
+
+except:
+
+        sys.exit('Usage: %s -p <port> -o <origin>' % sys.argv[0])
+
+
+def myhandler(*args):
+	folder_size=0.0
+        httphandler(origin,folder_size,cache,*args)
+#webserver is created
+cache={}
+myserver = HTTPServer(('', port),myhandler)
+print 'Started httpserver on port ' , port
+
+#Wait forever for incoming http GET requests
+try:
+	myserver.serve_forever()
+#the server closes if it receives a keyboard interupt
+except KeyboardInterrupt:
+            pass
+myserver.server_close()

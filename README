@@ -1,0 +1,76 @@
+
+Roll Your Own CDN
++++++++++++++++++
+
+EC2 servers:
+-----------
+ec2-54-88-98-7.compute-1.amazonaws.com                  Origin server(port 8080)
+ec2-54-85-32-37.compute-1.amazonaws.com                 N. Virginia
+ec2-54-193-70-31.us-west-1.compute.amazonaws.com        N. California
+ec2-52-38-67-246.us-west-2.compute.amazonaws.com        Oregon
+ec2-52-51-20-200.eu-west-1.compute.amazonaws.com        Ireland
+ec2-52-29-65-165.eu-central-1.compute.amazonaws.com     Frankfurt
+ec2-52-196-70-227.ap-northeast-1.compute.amazonaws.com  Tokyo
+ec2-54-169-117-213.ap-southeast-1.compute.amazonaws.com Singapore
+ec2-52-63-206-143.ap-southeast-2.compute.amazonaws.com  Sydney
+ec2-54-233-185-94.sa-east-1.compute.amazonaws.com       Sao Paulo
+
+
+High Level Approach:
+-------------------
+
+To Return the best replica server, we have used two methods:Active measurement and
+geolocation.
+First the active measurement is used to get the RTTs between the Replicas and the client. 
+For cases where ICMP is blocked then RTT is not returned,then we check the cache for 
+mapping based on geolocation. If the mapping is not present, then nearest replica is 
+returned based on the geolocation measurement.
+
+1.DNS server
+++++++++++++
+
+a. Active measurement
+ 
+
+b. Geolocation
+To find the latitude and longitude of the client, we have used the geolocation API IpinfoDB.
+After the latitude and longitude is fetched for the client, the distance to all the 
+replica servers is calculated. The least distance is returned as its the closet server
+to the client.
+
+c. Cache Management
+A dictonary is maintained, with key value pair of client IP and Best replica server
+based on geolocation.
+
+
+2.HTTP server
++++++++++++++
+
+a. Cache Management
+As the Replica server has 10MB limit, we used gzip to compress all the webpages
+downloaded.
+As zipf Distribution is used,we are deleting the least used webpage  from the cache when
+ the size exceed the limit.
+To achive this, a dictonary was maintained with a key value pair of webpage and number 
+of times visited.
+
+b.Active Measurement
+As scamper was available on replica servers, we wrote a server program which listens for 
+requests from clients. When a client sends a request with an ip address, this program
+returns teh RTT to that IP address from the replica server.
+
+Performance Enhancing Techniques:
+--------------------------------
+
+1.Active measurement:
+As RTT is the best measure to select a server when a client wants best performance, we used
+scamper to ping the client and get the RTT and respond with the least RTT server.
+But in cases where RTT is not returned, we required an alternative method and we used
+geolocation.
+
+2. cache Management:
+Gzip was used to compress the webpages while saving in the replica servers.
+
+challenges Faced:
+----------------
+
